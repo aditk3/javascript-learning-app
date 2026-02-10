@@ -1,13 +1,12 @@
 # JavaScript Mastery — Complete Student Guide
 
-This is a self-contained, web-based JavaScript course. It mirrors the structure of the Java learning app: read concise explanations, study runnable examples, then complete interactive exercises (with solutions and explanations).
+**javascript-learning-app** is a self-contained, web-based JavaScript course.
 
 ## What you get (course scale)
 
-- **26 topics** across JavaScript Fundamentals and Advanced JavaScript & Web APIs
-- **30+ code examples** (read-only, syntax highlighted)
-- **35+ interactive exercises** (editable editor, Run/Reset, Solution + Explanation)
-- **3 quizzes** (multiple-choice knowledge checks)
+- **32 topics** across three modules: Fundamentals, Language Features, and Advanced & Web APIs
+- **Dozens of code examples and interactive exercises** (editable editor, Run/Reset, Solution + Explanation)
+- **Quizzes** (multiple-choice knowledge checks)
 
 ## How to run
 
@@ -23,7 +22,7 @@ Then open the URL printed by the server (e.g. `http://127.0.0.1:8080`).
 
 ## How the learning flow works
 
-- **Sidebar navigation:** Topics are grouped into two modules and are meant to be taken in order.
+- **Sidebar navigation:** Topics are grouped into three modules and are meant to be taken in order.
 - **Lesson page:**
   - **Explanation** (concepts and mental model)
   - **Code examples** (reference implementations)
@@ -37,73 +36,61 @@ Then open the URL printed by the server (e.g. `http://127.0.0.1:8080`).
 - **Reset** restores the original starter code for that exercise.
 - **DOM / Fetch / Axios:** Some topics (DOM, Fetch, Axios) are explained in the lesson but run in Node.js here, so DOM and real HTTP may not be available. Exercises use simulations or plain JS where needed. For full DOM/fetch experience, try the same code in the browser console or an HTML page.
 
-## Using input files (`assets/`) in exercises
-
-Some exercises can use stdin or load data from files under `assets/` (e.g. `assets/users.json`, `assets/text-data.txt`, `assets/config.json`).
-
-- **Why a server:** Browsers typically block `fetch()` from `file://` pages.
-- **Fix:** Run `npm run dev` and open the served URL.
-- In content, an exercise can specify `stdin` or `stdinAsset: 'assets/your-file.txt'` if the app supports it.
-
 ## Course map (what the course teaches)
 
-Content is defined in `content.js` as `JAVASCRIPT_CONTENT`. The app builds navigation from it. Topic set:
-
-### Module 1 — JavaScript Fundamentals
+### Module 1 — Fundamentals
 
 - **Introduction to JavaScript** — What is JS, where it runs, `console.log`
-- **Variables (var, let, const)** — Declaration, reassignment, best practices
-- **Data Types** — Primitives, reference types, `typeof`
-- **Scope** — Global, function, block scope
+- **Data Types** — Primitives, reference types, `typeof`, coercion
+- **Variables & Scope** — `var`, `let`, `const`, block/function scope, TDZ
+- **Control Flow** — Conditionals, loops, `break`/`continue`, `switch`, ternary
+- **Operators & Expressions** — Arithmetic, comparison, logical, `??`, `?.`, precedence
 - **Arrays** — Creation, methods, manipulation (`push`, `map`, `filter`, etc.)
+- **Objects** — Creation, properties, methods, iteration
+- **Strings** — Methods: `slice`, `split`, `includes`, `trim`, and more
+- **Numbers & Math** — `Number()`, `parseInt`/`parseFloat`, `NaN`, `Math`, floating-point
 - **Functions** — Declarations, expressions, parameters, return
 - **Template Literals** — String interpolation, multi-line strings
-- **Strict Mode** — `"use strict"`, effects
-- **The `this` Keyword** — Context, methods
+- **Strict Mode** — `"use strict"` and its effects
+
+### Module 2 — Language Features
+
+- **The `this` Keyword** — Context and binding rules
 - **Classes (ES6)** — Class syntax, constructors, methods
 - **Hoisting** — Variable and function hoisting
 - **Error Handling** — `try`/`catch`/`finally`, throwing errors
-- **Default Parameters** — Default values for function parameters
-- **Spread & Rest Operators** — `...` in parameters and expressions
-- **Arrow Functions** — Syntax, lexical `this`
-- **Destructuring** — Array and object destructuring
+- **Spread and Rest Operators** — `...` for gathering and spreading
+- **Arrow Functions** — Syntax and lexical `this`
+- **Destructuring** — Unpacking values from arrays and objects
+- **Modules** — `import`/`export`, default vs named, CommonJS
+- **Data Structures (Map & Set)** — Map and Set with use cases
+- **Dates** — Date basics, `toISOString`, parsing pitfalls
 
-### Module 2 — Advanced JavaScript & Web APIs
+### Module 3 — Advanced & Web APIs
 
 - **DOM Manipulation** — Selecting, creating, modifying elements (browser context)
-- **Events and Listeners** — `addEventListener`, event object
-- **Event Bubbling and Capturing** — Propagation order
-- **Event Loop** — Call stack, callback queue, microtasks
-- **JavaScript HTTP (XMLHttpRequest)** — Basic XHR usage
+- **Events and Listeners** — Handling user interactions and browser events
+- **Event Bubbling and Capturing** — How events travel through nested elements
+- **The Event Loop** — How JavaScript schedules async work on one thread
+- **HTTP Basics** — Requests, responses, methods, status codes
 - **JSON** — `JSON.parse`, `JSON.stringify`, working with JSON
 - **Promises** — Creation, chaining, error handling
-- **Fetch API** — GET, POST, handling responses
-- **Async/Await** — Syntax and usage
-- **Axios** — Library usage, comparison with Fetch
+- **Fetch API** — The modern way to make HTTP requests
+- **Async/Await** — Writing asynchronous code that reads like synchronous code
+- **Axios** — A popular HTTP client library
 
 ## Student workflow (recommended)
 
 - **Read first, then type:** Skim the explanation, then try the exercise from memory.
 - **Predict output** before running: Use "Run Code" as feedback, not the first step.
 - **Use solutions as a post-check:** Compare your approach to the solution and read the explanation.
-- **Move in order:** Fundamentals first, then Advanced & Web APIs.
+- **Move in order:** Fundamentals → Language Features → Advanced & Web APIs (as in [content.js](content.js)).
 
-## Project structure (for maintainers / contributors)
 
-```
-javascript-learning-app/
-├── index.html      # Main page (loads content + app logic)
-├── styles.css      # Styling and layout (JavaScript branding)
-├── content.js      # Curriculum: JAVASCRIPT_CONTENT (topics, examples, exercises, quizzes)
-├── app.js          # Navigation, rendering, editor setup, code execution (Piston API)
-├── assets/         # Sample files for I/O exercises (e.g. users.json, text-data.txt, config.json)
-├── package.json    # Optional: dev server script
-└── README.md       # This file
-```
 
 ### Where the course content lives
 
-All curriculum is in `content.js` under `JAVASCRIPT_CONTENT`. Each topic is an object with:
+All curriculum is in [content.js](content.js) under `JAVASCRIPT_CONTENT`. The app ([app.js](app.js)) builds sidebar navigation from it. Each topic is an object with:
 
 - **`title`** / **`subtitle`** — Shown at the top of the lesson
 - **`content`** — HTML string (explanations, lists, code snippets)

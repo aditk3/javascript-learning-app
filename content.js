@@ -2279,6 +2279,50 @@ div.addEventListener('click', () => console.log('Div clicked'));`,
                 caption: 'stopPropagation() prevents the event from reaching other elements (e.g. parent).'
             }
         ],
+        exercises: [
+            {
+                question: 'Complete the button\'s click handler so it logs <code>"Button"</code> and then calls <code>e.stopPropagation()</code> so the parent\'s listener does not run.',
+                starter: `// Assume 'button' and 'parent' are already in the DOM
+parent.addEventListener('click', () => console.log("Parent"));
+button.addEventListener('click', (e) => {
+  // Log "Button" and stop the event from bubbling to parent
+});`,
+                solution: `parent.addEventListener('click', () => console.log("Parent"));
+button.addEventListener('click', (e) => {
+  console.log("Button");
+  e.stopPropagation();
+});`,
+                explanation: 'Calling <code>e.stopPropagation()</code> in the button\'s handler stops the event from bubbling up, so the parent\'s click listener never runs.'
+            },
+            {
+                question: 'Register a click listener on <code>outer</code> that runs in the <strong>capturing</strong> phase and logs <code>"capture"</code>. Use the third argument <code>{ capture: true }</code>.',
+                starter: `// outer and inner are nested elements (e.g. div > button)
+outer.addEventListener('click', () => {
+  // Add this listener for the CAPTURING phase (third argument)
+  console.log("capture");
+});
+inner.addEventListener('click', () => console.log("inner"));`,
+                solution: `outer.addEventListener('click', () => {
+  console.log("capture");
+}, { capture: true });
+inner.addEventListener('click', () => console.log("inner"));`,
+                explanation: 'The third argument <code>{ capture: true }</code> (or <code>true</code>) registers the listener for the capturing phase, so it runs on the way down before the target.'
+            },
+            {
+                question: 'Add two listeners on the same <code>button</code>: first one logs <code>"first"</code> and calls <code>e.stopImmediatePropagation()</code>; second one logs <code>"second"</code>. When clicked, only <code>"first"</code> should log (the second listener must not run).',
+                starter: `button.addEventListener('click', (e) => {
+  console.log("first");
+  // Stop other listeners on THIS element from running
+});
+button.addEventListener('click', () => console.log("second"));`,
+                solution: `button.addEventListener('click', (e) => {
+  console.log("first");
+  e.stopImmediatePropagation();
+});
+button.addEventListener('click', () => console.log("second"));`,
+                explanation: '<code>stopImmediatePropagation()</code> stops the event from reaching any other listeners, including others on the same element. So only "first" runs.'
+            }
+        ],
         quizzes: [
             {
                 question: 'When you click a button inside a div, and both have default click listeners, which runs first?',
@@ -2378,6 +2422,37 @@ console.log("E");
             }
         ],
         exercises: [
+            {
+                question: 'Predict the output order. Run to verify.',
+                starter: `console.log("A");
+setTimeout(() => console.log("B"), 0);
+Promise.resolve().then(() => console.log("C"));
+console.log("D");`,
+                solution: `Order: A, D, C, B`,
+                explanation: 'Sync runs first (A, D). Then the microtask queue is drained (C). Then the macrotask from setTimeout runs (B).'
+            },
+            {
+                question: 'Predict the output order. <code>queueMicrotask</code> schedules a microtask (same queue as Promise callbacks). Run to verify.',
+                starter: `console.log("1");
+queueMicrotask(() => console.log("2"));
+setTimeout(() => console.log("3"), 0);
+Promise.resolve().then(() => console.log("4"));
+console.log("5");`,
+                solution: `Order: 1, 5, 2, 4, 3`,
+                explanation: 'Sync first (1, 5). Then all microtasks run in the order they were queued: queueMicrotask (2), then Promise.then (4). Finally the macrotask (3).'
+            },
+            {
+                question: 'Predict the output order. Note: each <code>.then()</code> can queue another microtask. Run to verify.',
+                starter: `console.log("a");
+Promise.resolve()
+  .then(() => console.log("b"))
+  .then(() => console.log("c"));
+setTimeout(() => console.log("d"), 0);
+Promise.resolve().then(() => console.log("e"));
+console.log("f");`,
+                solution: `Order: a, f, b, e, c, d`,
+                explanation: 'Sync (a, f). Microtasks drain: first then-callbacks (b, e); that queues the chained callback (c), which runs in the same drain. Then macrotask (d).'
+            },
             {
                 question: 'Predict the exact output order. Write predictions as comments first, then run to verify.',
                 starter: `// Predict the output order!
@@ -2678,84 +2753,162 @@ console.log(parsed.date instanceof Date);`,
         title: 'Promises',
         subtitle: 'Creation, chaining, and error handling',
         content: `
+            <h2>Why do we need Promises?</h2>
+            <p>Many operations in JavaScript take time: reading a file, asking a server for data, waiting for a timer. Your code cannot "pause" and wait for them — the rest of the program keeps running. So we need a way to say: "When this slow thing finishes, run this code." That's what callbacks did: you pass a function that runs later. But nesting many callbacks leads to hard-to-read "callback hell." Promises give you a single object that represents "work in progress" and lets you attach <code>.then()</code> and <code>.catch()</code> to run code when that work succeeds or fails — and you can chain them instead of nesting.</p>
             <h2>What is a Promise?</h2>
-            <p>A Promise represents the eventual completion (or failure) of an async operation. It provides a clean, chainable way to handle async results.</p>
-            <p>Create with <code>new Promise((resolve, reject) => { ... })</code></p>
-            <p>Call <code>resolve(value)</code> or <code>reject(err)</code> when done.</p>
-            <h2>Promise States & Usage</h2>
+            <p>A Promise is an object that represents the <strong>eventual result</strong> of an asynchronous operation. Think of it as an IOU: "I don't have the answer yet, but when I do (or if I fail), I'll let you know." The Promise is in one of three states:</p>
             <ul>
-                <li><strong>Pending:</strong> Operation in progress.</li>
-                <li><strong>Fulfilled (Success):</strong> <code>.then(value => ...)</code> runs.</li>
-                <li><strong>Rejected (Failure):</strong> <code>.catch(error => ...)</code> runs.</li>
+                <li><strong>Pending:</strong> The async work hasn't finished yet. This is the initial state.</li>
+                <li><strong>Fulfilled (resolved):</strong> The work finished successfully. The Promise now has a <strong>value</strong> (e.g. the data from the server).</li>
+                <li><strong>Rejected:</strong> Something went wrong. The Promise now has a <strong>reason</strong> (usually an Error).</li>
             </ul>
-            <p><strong>Handling Results:</strong> Prefer chaining <code>.then().catch()</code> over the older <code>.then(success, fail)</code> pattern. Use <code>.finally()</code> to run code regardless of outcome.</p>
-            <p><strong>Chaining:</strong> Returning a value from <code>.then()</code> passes it to the next <code>.then()</code>.</p>
-            <h2>Promise Combinators</h2>
+            <p>Once a Promise is fulfilled or rejected, it stays that way forever — it "settles." You can't change it after that.</p>
+            <h2>How do you create a Promise?</h2>
+            <p>You create one with <code>new Promise(executor)</code>. The <strong>executor</strong> is a function that runs <strong>immediately</strong> when the Promise is created. It receives two functions as arguments:</p>
             <ul>
-                <li><code>Promise.all([])</code> — Wait for ALL to resolve (fail-fast)</li>
-                <li><code>Promise.allSettled([])</code> — Wait for ALL to settle (never fails)</li>
-                <li><code>Promise.race([])</code> — First to settle wins</li>
-                <li><code>Promise.any([])</code> — First to fulfill wins</li>
+                <li><code>resolve(value)</code> — Call this when the async work succeeds. It puts the Promise in the <strong>fulfilled</strong> state and passes <code>value</code> to any <code>.then()</code> handler.</li>
+                <li><code>reject(reason)</code> — Call this when something fails. It puts the Promise in the <strong>rejected</strong> state and passes <code>reason</code> to any <code>.catch()</code> handler.</li>
             </ul>
+            <p>You call <code>resolve</code> or <code>reject</code> only when your async operation is done (e.g. inside a <code>setTimeout</code> callback, or when a network request completes). The Promise stays <strong>pending</strong> until you call one of them.</p>
+            <h2>How do you use a Promise?</h2>
+            <p>You don't "get" the value directly from the Promise — you <strong>attach handlers</strong> that run later:</p>
+            <ul>
+                <li><code>.then(onFulfilled)</code> — Registers a function to run when the Promise is <strong>fulfilled</strong>. That function receives the resolved value as its argument.</li>
+                <li><code>.catch(onRejected)</code> — Registers a function to run when the Promise is <strong>rejected</strong>. That function receives the error/reason.</li>
+                <li><code>.finally(onFinally)</code> — Registers a function that runs when the Promise settles (whether it succeeded or failed). Useful for cleanup (e.g. hiding a loading spinner).</li>
+            </ul>
+            <p>Each of these methods returns a <strong>new Promise</strong>, so you can chain: <code>promise.then(...).catch(...).finally(...)</code>. That's why you see long chains instead of deep nesting.</p>
+            <h2>Chaining: passing values and Promises</h2>
+            <p>If you <strong>return a value</strong> from a <code>.then()</code> callback, that value becomes the resolved value of the Promise returned by that <code>.then()</code>. So the next <code>.then()</code> in the chain receives it. If you <strong>return another Promise</strong>, the chain waits for that Promise to settle, then the next <code>.then()</code> gets that Promise's value. So you can do step 1, then step 2, then step 3 in a flat chain instead of nesting callbacks.</p>
+            <p>If any step throws or returns a rejected Promise, the chain jumps to the nearest <code>.catch()</code>. After that, you can keep chaining <code>.then()</code> (the catch "handles" the error and the next then receives whatever the catch returned).</p>
+            <h2>Promise combinators: working with many Promises</h2>
+            <p>When you have several Promises and want to coordinate them:</p>
+            <ul>
+                <li><code>Promise.all(promises)</code> — Waits for <strong>all</strong> Promises to fulfill. Resolves with an array of results in the same order. If <strong>any</strong> Promise rejects, <code>Promise.all</code> rejects immediately (fail-fast). Use it when you need every result before continuing.</li>
+                <li><code>Promise.allSettled(promises)</code> — Waits for all to <strong>settle</strong> (fulfill or reject). Never rejects. Resolves with an array of <code>{ status, value }</code> or <code>{ status, reason }</code>. Use it when you want to know the outcome of each, even if some failed.</li>
+                <li><code>Promise.race(promises)</code> — Resolves or rejects as soon as the <strong>first</strong> Promise settles (whichever happens first). Use it for timeouts: race your real task against a Promise that rejects after a delay.</li>
+                <li><code>Promise.any(promises)</code> — Resolves as soon as the <strong>first</strong> Promise <strong>fulfills</strong>. Rejects only if all of them reject. Use it when you want the first success.</li>
+            </ul>
+            <div class="info-box tip">
+                <strong>Quick reference</strong> Create: <code>new Promise((resolve, reject) => { ... })</code>.<br/>Succeed: call <code>resolve(value)</code>.<br/>Fail: call <code>reject(err)</code>. Use: <code>.then(v => ...)</code>, <code>.catch(e => ...)</code>, <code>.finally(() => ...)</code>.<br/>Shortcuts: <code>Promise.resolve(x)</code> and <code>Promise.reject(e)</code> create an already-settled Promise.
+            </div>
         `,
         examples: [
+            {
+                code: `// 1. Create a Promise. The executor runs RIGHT NOW.
+const p = new Promise((resolve, reject) => {
+  // We'll "finish" after 500ms by calling resolve
+  setTimeout(() => {
+    resolve("Done!");
+  }, 500);
+});
+
+// 2. Attach a handler. It runs LATER when resolve() is called.
+p.then(result => {
+  console.log(result);  // "Done!" (after 500ms)
+});`,
+                caption: 'The executor runs immediately; <code>resolve</code> is called later. <code>.then()</code> runs when the Promise fulfills.'
+            },
             {
                 code: `const check = (success) => new Promise((resolve, reject) => {
   success ? resolve("Ok!") : reject(new Error("Fail!"));
 });
 
 check(true).then(console.log);                   // "Ok!"
-check(false).catch(e => console.log(e.message)); // "Fail!"`, caption: 'Handling success (<code>.then</code>) and failure (<code>.catch</code>)'
+check(false).catch(e => console.log(e.message)); // "Fail!"`,
+                caption: 'Success path: <code>resolve(value)</code> → <code>.then</code> runs. Failure path: <code>reject(err)</code> → <code>.catch</code> runs.'
             },
             {
-                code: `const a = Promise.resolve(1);
+                code: `// Chaining: each .then receives the return value of the previous one
+Promise.resolve(10)
+  .then(n => n + 1)      // 10 + 1 = 11
+  .then(n => n * 2)      // 11 * 2 = 22
+  .then(console.log);    // 22`,
+                caption: 'Returning a value from <code>.then()</code> passes it to the next <code>.then()</code> in the chain.'
+            },
+            {
+                code: `// Promise.all: wait for ALL, get an array of results (same order as input)
+const a = Promise.resolve(1);
 const b = Promise.resolve(2);
-Promise.all([a, b]).then(([x, y]) => console.log(x + y));  // 3`, caption: '<code>Promise.all</code>: wait for all, get array of results'
+Promise.all([a, b]).then(([x, y]) => console.log(x + y));  // 3`,
+                caption: '<code>Promise.all</code>: wait for every Promise to resolve, then get an array of results.'
             },
             {
-                code: `const fast = Promise.resolve("first");
+                code: `// Promise.race: first to settle wins (resolve or reject)
+const fast = Promise.resolve("first");
 const slow = new Promise(r => setTimeout(() => r("second"), 100));
-Promise.race([fast, slow]).then(console.log);  // "first"`, caption: '<code>Promise.race</code>: first to settle wins'
+Promise.race([fast, slow]).then(console.log);  // "first"`,
+                caption: '<code>Promise.race</code>: the first Promise to settle (here, the fast one) wins.'
             },
             {
-                code: `// Creating and chaining Promises\nfunction fetchUser(id) {\n    return new Promise((resolve, reject) => {\n        setTimeout(() => {\n            if (id > 0) resolve({ id, name: "User " + id });\n            else reject(new Error("Invalid user ID"));\n        }, 100);\n    });\n}\n\nfetchUser(1)\n    .then(user => {\n        console.log("Got:", user.name);\n        return fetchUser(2);\n    })\n    .then(user => console.log("Got:", user.name))\n    .catch(err => console.error("Error:", err.message))\n    .finally(() => console.log("Done!"));`,
-                caption: 'Promises chain with <code>.then()</code>. Each receives the return value of the previous one.'
+                code: `// Realistic chain: fetch user 1, then fetch user 2, handle errors once
+function fetchUser(id) {
+    return new Promise((resolve, reject) => {
+        setTimeout(() => {
+            if (id > 0) resolve({ id, name: "User " + id });
+            else reject(new Error("Invalid user ID"));
+        }, 100);
+    });
+}
+
+fetchUser(1)
+    .then(user => {
+        console.log("Got:", user.name);
+        return fetchUser(2);   // Return a Promise → next .then waits for it
+    })
+    .then(user => console.log("Got:", user.name))
+    .catch(err => console.error("Error:", err.message))
+    .finally(() => console.log("Done!"));`,
+                caption: 'Chaining async steps: return a Promise from <code>.then()</code> and the next <code>.then()</code> gets its value. One <code>.catch()</code> handles errors from the whole chain.'
             }
         ],
         exercises: [
             {
                 question: 'Create a Promise that resolves with the string <code>"Hello"</code> after 0ms (use <code>setTimeout</code> inside the executor). Then use <code>.then</code> to log the value.',
-                starter: `// Your code here`,
+                starter: `// new Promise((resolve, reject) => { ... })
+// Inside the executor, use setTimeout(() => resolve("Hello"), 0);
+// Then attach .then(value => console.log(value))`,
                 solution: `const p = new Promise((resolve) => {
   setTimeout(() => resolve("Hello"), 0);
 });
 p.then(value => console.log(value));`,
-                explanation: 'The executor runs immediately; resolve is called when the timeout fires.'
+                explanation: 'The executor runs as soon as the Promise is created. You call <code>resolve("Hello")</code> inside the timeout callback so the Promise fulfills later. <code>.then()</code> runs when that happens and receives <code>"Hello"</code>.'
             },
             {
-                question: 'Create a Promise that resolves with the number 42. Chain <code>.then</code> to multiply by 2 and log the result.',
-                starter: `// Your code here`,
+                question: 'Create a Promise that resolves with the number 42 (use <code>Promise.resolve(42)</code>). Chain <code>.then</code> to multiply by 2, then another <code>.then</code> to log the result.',
+                starter: `// Promise.resolve(42) gives you an already-fulfilled Promise
+// .then(n => n * 2) then .then(result => console.log(result))`,
                 solution: `const p = Promise.resolve(42);
 p.then(n => n * 2).then(result => console.log(result));`,
-                explanation: 'Returning a value from then passes it to the next then.'
+                explanation: '<code>Promise.resolve(42)</code> is already fulfilled, so the first <code>.then</code> runs soon with 42. Returning <code>n * 2</code> (84) passes it to the next <code>.then</code>, which logs it.'
+            },
+            {
+                question: 'Use <code>Promise.reject(new Error("oops"))</code> and attach <code>.catch(e => console.log(e.message))</code> so the error is handled and "oops" is logged.',
+                starter: `const p = Promise.reject(new Error("oops"));
+// Attach .catch to log e.message`,
+                solution: `const p = Promise.reject(new Error("oops"));
+p.catch(e => console.log(e.message));`,
+                explanation: 'A rejected Promise triggers <code>.catch()</code> instead of <code>.then()</code>. The callback receives the error; <code>e.message</code> is the string you passed to <code>new Error("oops")</code>.'
             },
             {
                 question: 'Use <code>Promise.all</code> on an array of two promises: <code>Promise.resolve(10)</code> and <code>Promise.resolve(20)</code>. In <code>.then</code>, destructure the result as <code>[a, b]</code> and log <code>a + b</code>.',
-                starter: `// Your code here`,
+                starter: `// Promise.all([p1, p2]).then(([a, b]) => ...)`,
                 solution: `Promise.all([Promise.resolve(10), Promise.resolve(20)])
   .then(([a, b]) => console.log(a + b));`,
-                explanation: '<code>Promise.all</code> resolves with an array of results in the same order as the input promises.'
+                explanation: '<code>Promise.all</code> waits for every Promise to resolve, then gives you an array of results in the same order: <code>[10, 20]</code>. Destructuring as <code>[a, b]</code> lets you use them directly.'
             },
             {
-                question: 'Implement <code>promiseTimeout</code> that rejects with "Timeout" if a promise doesn\'t resolve in time.',
+                question: 'Implement <code>promiseTimeout</code> that rejects with "Timeout" if a promise doesn\'t resolve in time. Use <code>Promise.race</code> between the given <code>promise</code> and a new Promise that rejects after <code>ms</code> milliseconds.',
                 starter: `function promiseTimeout(promise, ms) {\n    // Use Promise.race\n}\n\n// Fast enough\nconst fast = new Promise(r => setTimeout(() => r("done!"), 50));\npromiseTimeout(fast, 200)\n    .then(v => console.log("Success:", v))\n    .catch(e => console.log("Failed:", e));\n\n// Too slow\nconst slow = new Promise(r => setTimeout(() => r("done!"), 500));\npromiseTimeout(slow, 100)\n    .then(v => console.log("Success:", v))\n    .catch(e => console.log("Failed:", e));`,
                 solution: `function promiseTimeout(promise, ms) {\n    const timeout = new Promise((_, reject) => {\n        setTimeout(() => reject("Timeout"), ms);\n    });\n    return Promise.race([promise, timeout]);\n}`,
-                explanation: '<code>Promise.race</code> settles as soon as the first promise does. We race against a timeout — if the timeout fires first, the race rejects.'
+                explanation: '<code>Promise.race</code> settles as soon as one Promise does. We race the real task against a timeout Promise that rejects after <code>ms</code>. If the task wins, you get its value; if the timeout wins, you get "Timeout" in <code>.catch</code>.'
             }
         ],
         quizzes: [
-            { question: 'What are the possible states of a <code>Promise</code>?', options: ['pending and done', 'pending, fulfilled, rejected', 'running and stopped', 'sync and async'], answer: 1, explanation: 'A Promise is pending until it is either fulfilled with a value or rejected with a reason.' },
-            { question: 'What does <code>Promise.all</code> do if one promise rejects?', options: ['Waits for the rest', 'Resolves with undefined', 'Rejects immediately (fail-fast)', 'Retries the rejected promise'], answer: 2, explanation: '<code>Promise.all</code> is fail-fast: if any promise rejects, the whole thing rejects.' }
+            { question: 'What are the possible states of a <code>Promise</code>?', options: ['pending and done', 'pending, fulfilled, rejected', 'running and stopped', 'sync and async'], answer: 1, explanation: 'A Promise is pending until it is either fulfilled with a value or rejected with a reason. It can only be in one of these three states.' },
+            { question: 'When is the executor function (the function you pass to <code>new Promise(...)</code>) run?', options: ['When the Promise resolves', 'When you call <code>.then()</code>', 'Immediately when the Promise is created', 'Never'], answer: 2, explanation: 'The executor runs synchronously as soon as you create the Promise. You typically call resolve or reject later from inside a callback (e.g. setTimeout or a network handler).' },
+            { question: 'What does <code>Promise.all</code> do if one promise rejects?', options: ['Waits for the rest', 'Resolves with undefined', 'Rejects immediately (fail-fast)', 'Retries the rejected promise'], answer: 2, explanation: '<code>Promise.all</code> is fail-fast: if any promise rejects, the whole thing rejects with that reason.' },
+            { question: 'What does returning a value from a <code>.then()</code> callback do?', options: ['Nothing', 'It becomes the resolved value for the next <code>.then()</code> in the chain', 'It cancels the Promise', 'It triggers .catch()'], answer: 1, explanation: 'Returning a value (or a Promise) from .then() passes it to the next .then() in the chain. That\'s how you pass data along the chain.' }
         ]
     },
     fetch: {
@@ -2763,20 +2916,31 @@ p.then(n => n * 2).then(result => console.log(result));`,
         title: 'Fetch API',
         subtitle: 'The modern way to make HTTP requests',
         content: `
-        <h2>What is the Fetch API?</h2>
-            <p>The Fetch API is the modern, Promise-based replacement for XMLHttpRequest.</p>
+            <h2>What is the Fetch API?</h2>
+            <p>The Fetch API is the built-in, Promise-based way to make HTTP requests in the browser (and in Node.js in modern runtimes). You pass a URL and optional options; it returns a Promise. When that Promise resolves, you get a <strong>Response</strong> object. You then read the response body (e.g. as JSON or text) and handle any errors.</p>
+            <p>It replaced the older <code>XMLHttpRequest</code> with a simpler, chainable API that works naturally with <code>.then()</code> and <code>async/await</code>.</p>
             <div class="info-box note">
                 <strong>Legacy: XMLHttpRequest (XHR)</strong>
                 Before <code>fetch</code>, developers used <code>XMLHttpRequest</code>. It was event-based, verbose, and lacked native Promise support (leading to "callback hell").
             </div>
 
-            <h2>fetch(url, options?)</h2>
-            <p>Starts a network request and returns a Promise that resolves to a Response object.</p>
-            <ul>
-                <li><strong>Check Status:</strong> Use <code>response.ok</code> (true if 200-299) or <code>response.status</code>.</li>
-                <li><strong>Read Body:</strong> Use <code>response.json()</code> or <code>response.text()</code> (both return Promises).</li>
-                <li><strong>POST:</strong> Pass options: <code>{ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }</code>.</li>
-            </ul>
+            <h2>Calling fetch</h2>
+            <p><code>fetch(url)</code> starts a GET request by default. You can pass a second argument for method, headers, and body (e.g. for POST).</p>
+            <p>The Promise resolves with a <strong>Response</strong> object as soon as the response <em>headers</em> are available — not when the full body has been downloaded. The body is a stream, so you must call a method like <code>.json()</code> or <code>.text()</code> to actually read it; those methods return Promises that resolve with the parsed content.</p>
+
+            <h3>Checking the response status</h3>
+            <p>Use <code>response.ok</code> (true for status 200–299) or <code>response.status</code> to see if the request "succeeded" from the server's point of view.</p>
+            <p><strong>Important:</strong> Unlike libraries such as Axios, <code>fetch</code> does <em>not</em> reject the Promise when the server returns 4xx or 5xx. A 404 or 500 response still resolves. You must check <code>res.ok</code> or <code>res.status</code> yourself and throw (or handle the error) so your <code>.catch()</code> or <code>try/catch</code> runs.</p>
+
+            <h3>Reading the body</h3>
+            <p><code>response.json()</code> returns a Promise that resolves to the body parsed as JSON. <code>response.text()</code> returns a Promise that resolves to the raw body string.</p>
+            <p>You can only read the body once per response. Call one method (<code>.json()</code> or <code>.text()</code>) and use that result.</p>
+
+            <h3>POST and other methods</h3>
+            <p>Pass a second argument: <code>{ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }</code>. For JSON APIs, set the <code>Content-Type</code> header and pass the request body as a string (use <code>JSON.stringify</code> on your object). The <code>body</code> option must be a string, FormData, etc., not a plain JavaScript object.</p>
+
+            <h3>Typical flow</h3>
+            <p>Start the request → check <code>res.ok</code> (throw if not) → call <code>res.json()</code> or <code>res.text()</code> → use the data in the next <code>.then()</code> or with <code>async/await</code>. Use <code>.catch()</code> or <code>try/catch</code> for network failures and for the errors you throw when the status is bad.</p>
         `,
         examples: [
             {
@@ -2818,13 +2982,6 @@ fetch('https://api.example.com/posts', {
         ],
         exercises: [
             {
-                question: 'Simulate a fetch response: create <code>const res = { ok: true, json: () => Promise.resolve({ title: "Hello" }) }</code>. Call <code>res.json()</code> and use <code>.then</code> to log <code>data.title</code>.',
-                starter: `// Your code here`,
-                solution: `const res = { ok: true, json: () => Promise.resolve({ title: "Hello" }) };
-res.json().then(data => console.log(data.title));`,
-                explanation: 'In real code you would use <code>fetch(url).then(r => r.json()).then(...)</code>.'
-            },
-            {
                 question: 'Write the <code>options</code> object for a POST request to send <code>{ name: "Alice" }</code> as JSON.',
                 starter: `const options = {
   // method, headers, body...
@@ -2837,23 +2994,48 @@ res.json().then(data => console.log(data.title));`,
                 explanation: 'Set method to POST, Content-Type header to application/json, and body to the stringified object.'
             },
             {
-                question: 'Write a complete fetch chain using <code>mockFetch()</code>. 1. Check <code>res.ok</code> (throw if false). 2. Return <code>res.json()</code>. 3. Log the data. 4. Catch and log errors.',
+                question: 'Using <code>mockFetch()</code> below, write the minimal chain: <ol><li>In the first <code>.then(res => ...)</code>, return <code>res.json()</code>.</li><li>In the next <code>.then(data => ...)</code>, log <code>data.title</code>.</li><li>Add <code>.catch(err => console.log(err))</code>. No status check — just practice "response → parse body → use data."</li></ol>',
+                starter: `const mockFetch = () => Promise.resolve({
+  ok: true,
+  json: () => Promise.resolve({ title: "Hello World" })
+});
+
+mockFetch()
+  .then(res => {
+    // return res.json();
+  })
+  .then(data => {
+    // log data.title
+  })
+  .catch(err => {
+    // log err
+  });`,
+                solution: `mockFetch()
+  .then(res => res.json())
+  .then(data => console.log(data.title))
+  .catch(err => console.log(err));`,
+                explanation: 'The first <code>.then</code> receives the Response; returning <code>res.json()</code> passes the parsed body to the next <code>.then</code>. In real code you\'d also check <code>res.ok</code> before parsing — that\'s the next exercise.'
+            },
+            {
+                question: 'Now add a <strong>status check</strong>: using <code>mockFetch(success)</code>, write a chain that <ol><li>checks <code>res.ok</code> and throws <code>new Error("Error: " + res.status)</code> if false</li><li>returns <code>res.json()</code></li><li>logs the data</li><li>catches and logs the error</li></ol>Call <code>mockFetch(false)</code> so you hit the error path and see the catch run.',
                 starter: `const mockFetch = (success = true) => Promise.resolve({
   ok: success,
   status: success ? 200 : 404,
   json: () => Promise.resolve({ message: "Data received" })
 });
 
-mockFetch(true)
-  // Your code here: chain .then, check ok, parse json, log data, .catch`,
-                solution: `mockFetch(true)
+mockFetch(false)
+  // .then: if !res.ok throw new Error("Error: " + res.status); return res.json();
+  // next .then: log data
+  // .catch: log err.message`,
+                solution: `mockFetch(false)
   .then(res => {
     if (!res.ok) throw new Error("Error: " + res.status);
     return res.json();
   })
   .then(data => console.log(data))
   .catch(err => console.log(err.message));`,
-                explanation: 'A robust fetch chain handles the status check, JSON parsing, data usage, and error catching.'
+                explanation: 'Same chain as before, but you check <code>res.ok</code> first and throw so that 4xx/5xx responses are handled in <code>.catch</code>. With <code>mockFetch(false)</code> you should see "Error: 404" in the console.'
             }
         ],
         quizzes: [
@@ -2867,25 +3049,35 @@ mockFetch(true)
         title: 'Async/Await',
         subtitle: 'Writing asynchronous code that reads like synchronous code',
         content: `
-            <h2>What is async/await?</h2>
-            <p>Introduced in ES2017, <code>async/await</code> is syntactic sugar over Promises. It allows you to write asynchronous code that looks and behaves like synchronous code, avoiding "callback hell" or complex <code>.then()</code> chains.</p>
-            <h2>How It Works</h2>
+            <h2>Why async/await?</h2>
+            <p>Promises fixed callback hell by letting you chain <code>.then()</code> and <code>.catch()</code>, but long chains are still hard to read and debug. <strong>async/await</strong> (ES2017) lets you write the same logic in a linear, top-to-bottom style: you <code>await</code> a Promise and get its value in a variable, as if the code were synchronous. Under the hood it's still Promises — you're just writing them in a clearer way.</p>
+            <h2>How it works</h2>
             <ul>
-                <li><code>async function</code> — Always returns a Promise. If you return a value, it wraps it; if you throw, it rejects.</li>
-                <li><code>await</code> — Pauses execution of the function until the Promise settles. Can only be used inside an <code>async</code> function.</li>
-                <li><strong>Error handling:</strong> Use standard <code>try/catch</code> blocks instead of <code>.catch()</code>.</li>
+                <li><strong><code>async function</code></strong> — Any function declared with <code>async</code> automatically returns a Promise. If you <code>return value</code>, the caller gets <code>Promise.resolve(value)</code>. If you <code>throw</code>, the caller gets a rejected Promise. You never return "the result" directly; callers must <code>await</code> your function or use <code>.then()</code>.</li>
+                <li><strong><code>await promise</code></strong> — Can only be used <em>inside</em> an <code>async</code> function. It pauses that function until the Promise settles. If the Promise fulfills, <code>await</code> evaluates to the resolved value. If the Promise rejects, <code>await</code> throws, so you need <code>try/catch</code> to handle errors. The rest of your program (other functions, event handlers) keeps running; only the current async function is paused.</li>
+                <li><strong>Error handling:</strong> Use normal <code>try/catch/finally</code>. When an awaited Promise rejects, the exception is thrown at the <code>await</code> line and caught by the nearest <code>catch</code>.</li>
             </ul>
-            <h2>Common Patterns</h2>
-            <ul>
-                <li><strong>Sequential:</strong> <code>await</code> one after another (slower, but order guaranteed).</li>
-                <li><strong>Parallel:</strong> <code>const [a, b] = await Promise.all([p1, p2])</code> (faster).</li>
-            </ul>
+            <h2>Sequential vs parallel vs race</h2>
+            <p>If you <code>await</code> one thing, then <code>await</code> another, they run <strong>one after the other</strong> (sequential). If you need to run several async operations at the same time and wait for all of them, start all the Promises (don't await yet), then <code>await Promise.all([...])</code> — that's <strong>parallel</strong> and faster when the operations don't depend on each other.</p>
+            <p><strong><code>Promise.race([...])</code></strong> is different: it resolves or rejects as soon as the <strong>first</strong> Promise in the array settles (whether it fulfilled or rejected). You only get that first result; the others keep running in the background but their results are ignored. Common use: implement a <strong>timeout</strong> by racing your real task against a Promise that rejects after a delay — if the timeout wins, you handle the rejection and treat it as "took too long."</p>
             <div class="info-box tip">
-                <strong>✅ Best Practice</strong>
-                Use <code>async/await</code> for most logic. Fall back to direct Promise chains only when dealing with complex combinators or simple one-liners.
+                <strong>✅ Best practice:</strong> Prefer <code>async/await</code> for most async logic.<br/>Use raw Promises for one-off <code>Promise.all</code>/<code>Promise.race</code> or when you need to return a Promise without being in an async function.
             </div>
         `,
         examples: [
+            {
+                code: `// Minimal example: await gives you the value from a Promise
+const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function sayHi() {
+    await delay(500);           // Pause here until the timer resolves
+    console.log("Hello");
+    return "done";
+}
+
+sayHi();  // Returns a Promise; "Hello" logs after 500ms`,
+                caption: '<code>await</code> pauses the async function until the Promise resolves, then execution continues. The function still returns a Promise.'
+            },
             {
                 code: `// Simulated async API
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
@@ -2900,14 +3092,14 @@ async function fetchPosts(userId) {
     return [{ id: 1, title: "Post 1" }, { id: 2, title: "Post 2" }];
 }
 
-// Sequential: wait for user, THEN wait for posts
+// Sequential: wait for user, THEN wait for posts (order matters)
 async function getUserWithPosts(id) {
     const user = await fetchUser(id);
     const posts = await fetchPosts(user.id);
     console.log("Sequential:", { user, posts });
 }
 
-// Parallel: start both, wait for BOTH
+// Parallel: start both, wait for BOTH (faster when order doesn't matter)
 async function getParallelData() {
     const [user, posts] = await Promise.all([
         fetchUser(1),
@@ -2915,37 +3107,81 @@ async function getParallelData() {
     ]);
     console.log("Parallel:", { user, posts });
 }`,
-                caption: 'Sequential execution (easier to read) vs Parallel execution (faster)'
+                caption: 'Sequential: one <code>await</code> after another. Parallel: <code>await Promise.all([...])</code> so all run at once.'
             },
             {
                 code: `async function riskyTask() {
-  // Simulate a promise that rejects
   const p = Promise.reject(new Error("Something went wrong!"));
-  
   try {
-    const result = await p; // This throws!
+    const result = await p;   // Rejected Promise → throws here
     console.log(result);
   } catch (err) {
-    console.error("Caught error:", err.message);
+    console.error("Caught:", err.message);
   } finally {
     console.log("Cleanup always runs");
   }
-}`,
-                caption: 'Error handling with <code>try</code>/<code>catch</code>/<code>finally</code>'
+}
+riskyTask();`,
+                caption: 'When an awaited Promise rejects, it throws. Use <code>try/catch</code> (and optional <code>finally</code>) like with sync code.'
+            },
+            {
+                code: `// Promise.race: first to settle wins (resolve or reject)
+const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function run() {
+    const fast = delay(50).then(() => "first");
+    const slow = delay(200).then(() => "second");
+    const winner = await Promise.race([fast, slow]);
+    console.log(winner);  // "first" (50ms beats 200ms)
+}
+
+// Timeout pattern: race your task against a rejecting timeout
+async function fetchWithTimeout(promise, ms) {
+    const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout")), ms));
+    return Promise.race([promise, timeout]);
+}
+run();`,
+                caption: '<code>await Promise.race([a, b])</code> returns whichever Promise settles first. Useful for timeouts: race the real task against a Promise that rejects after <code>ms</code>.'
             }
         ],
         exercises: [
             {
-                question: 'Convert this .then() chain to async/await with proper error handling.',
+                question: 'Call <code>getData(success)</code> inside an <code>async</code> function: <code>await getData(false)</code> in a <code>try</code> block, and in <code>catch</code> log <code>err.message</code>. Call the async function so the rejection is handled.',
+                starter: `const getData = (ok) => ok
+  ? Promise.resolve({ value: 42 })
+  : Promise.reject(new Error("Failed"));
+
+async function run() {
+  try {
+    // await getData(false);
+    // log result
+  } catch (err) {
+    // log err.message
+  }
+}
+run();`,
+                solution: `async function run() {
+  try {
+    const result = await getData(false);
+    console.log(result);
+  } catch (err) {
+    console.log(err.message);
+  }
+}`,
+                explanation: 'When <code>getData(false)</code> rejects, <code>await</code> throws and execution jumps to <code>catch</code>. You should see "Failed" in the console.'
+            },
+            {
+                question: 'Convert the .then() chain below into an <code>async</code> function: <code>await</code> <code>getUser()</code>, then <code>await</code> <code>getOrders(user.id)</code>, log orders, and use <code>try/catch</code> for errors. Call the function at the end.',
                 starter: `const delay = (ms) => new Promise(r => setTimeout(r, ms));
 const getUser = () => delay(50).then(() => ({ id: 1, name: "Alice" }));
 const getOrders = (uid) => delay(50).then(() => [{ id: 101, amt: 25 }, { id: 102, amt: 50 }]);
 
-// Convert to async/await
-getUser()
-    .then(user => getOrders(user.id))
-    .then(orders => console.log("Orders:", orders))
-    .catch(err => console.error(err));`,
+async function main() {
+    // await getUser(), then await getOrders(user.id), then console.log("Orders:", orders)
+    // wrap in try/catch
+}
+main();`,
                 solution: `async function main() {
     try {
         const user = await getUser();
@@ -2954,27 +3190,69 @@ getUser()
     } catch (err) {
         console.error(err);
     }
-}
-main();`,
-                explanation: 'Wrap the logic in an <code>async function</code> (like <code>main</code>), <code>await</code> each step, and wrap the whole thing in <code>try/catch</code>.'
+}`,
+                explanation: 'Put the steps inside an <code>async function</code>, replace each <code>.then()</code> with <code>await</code> and variables, and use <code>try/catch</code> instead of <code>.catch()</code>. Don\'t forget to call <code>main()</code>.'
             },
             {
-                question: 'Fetch data from 3 mock endpoints in PARALLEL using <code>Promise.all</code> and <code>await</code>.',
+                question: 'Inside <code>getAll()</code>, fetch all three in parallel with <code>await Promise.all([fetchA(), fetchB(), fetchC()])</code>, destructure the result as <code>[a, b, c]</code>, log them, and call <code>getAll()</code>.',
                 starter: `const delay = (ms) => new Promise(r => setTimeout(r, ms));
 const fetchA = () => delay(100).then(() => "A");
 const fetchB = () => delay(200).then(() => "B");
 const fetchC = () => delay(50).then(() => "C");
 
 async function getAll() {
-    // Your code here: await Promise.all(...)
-}`,
+    // const [a, b, c] = await Promise.all([fetchA(), fetchB(), fetchC()]);
+    // console.log(a, b, c);
+}
+getAll();`,
                 solution: `async function getAll() {
     const [a, b, c] = await Promise.all([fetchA(), fetchB(), fetchC()]);
     console.log(a, b, c);
     return [a, b, c];
+}`,
+                explanation: '<code>Promise.all</code> runs all three at once. Total time is the slowest (200ms), not 100+200+50ms. <code>await</code> gives you the array of results in the same order.'
+            },
+            {
+                question: 'Write an <code>async</code> function <code>getMessage()</code> that awaits <code>delay(20)</code> then returns the string <code>"Hello"</code>. In another async function, await <code>getMessage()</code> and log the result. Call it.',
+                starter: `const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function getMessage() {
+  // await delay(20);
+  // return "Hello";
 }
-getAll();`,
-                explanation: 'Using <code>Promise.all</code> allows the delays to overlap. Total time is the max delay (200ms) rather than the sum (350ms).'
+
+async function main() {
+  // const msg = await getMessage();
+  // console.log(msg);
+}
+main();`,
+                solution: `async function getMessage() {
+  await delay(20);
+  return "Hello";
+}
+
+async function main() {
+  const msg = await getMessage();
+  console.log(msg);
+}`,
+                explanation: 'An async function returns a Promise; the caller must <code>await</code> it (or use <code>.then()</code>) to get the value. Returning <code>"Hello"</code> is like <code>Promise.resolve("Hello")</code>.'
+            },
+            {
+                question: 'Use <code>Promise.race</code>: await <code>Promise.race([fastFetch(), slowFetch()])</code> and log the result. <code>fastFetch</code> resolves after 30ms with <code>"fast"</code>, <code>slowFetch</code> after 150ms with <code>"slow"</code> — so the logged value should be <code>"fast"</code>.',
+                starter: `const delay = (ms) => new Promise(r => setTimeout(r, ms));
+const fastFetch = () => delay(30).then(() => "fast");
+const slowFetch = () => delay(150).then(() => "slow");
+
+async function run() {
+  // const result = await Promise.race([fastFetch(), slowFetch()]);
+  // console.log(result);
+}
+run();`,
+                solution: `async function run() {
+  const result = await Promise.race([fastFetch(), slowFetch()]);
+  console.log(result);
+}`,
+                explanation: '<code>Promise.race</code> settles when the first Promise does. Here the fast one wins, so <code>await</code> gives you <code>"fast"</code>.'
             }
         ],
         quizzes: [
@@ -2982,7 +3260,19 @@ getAll();`,
                 question: 'What does an async function always return?',
                 options: ['undefined', 'A callback', 'A Promise', 'The awaited value directly'],
                 answer: 2,
-                explanation: 'An async function always returns a Promise. If you return a value, it is wrapped in Promise.resolve(). If you throw, it becomes Promise.reject().'
+                explanation: 'An async function always returns a Promise. If you return a value, it becomes Promise.resolve(value). If you throw, it becomes a rejected Promise.'
+            },
+            {
+                question: 'Where can you use <code>await</code>?',
+                options: ['Anywhere in your code', 'Only inside an <code>async</code> function', 'Only in a <code>.then()</code> callback', 'Only at the top level of a module'],
+                answer: 1,
+                explanation: '<code>await</code> can only appear inside a function that is declared with <code>async</code>. (Top-level await is allowed in ES modules, but that\'s a special case.)'
+            },
+            {
+                question: 'When an awaited Promise rejects, how do you handle it in async/await code?',
+                options: ['With <code>.catch()</code> on the async function', 'With <code>try/catch</code> around the <code>await</code>', 'The async function never rejects', 'With <code>if (!result)</code>'],
+                answer: 1,
+                explanation: 'A rejected Promise at <code>await</code> throws an exception. You handle it with a normal <code>try/catch</code> block around the awaited expression (or around the whole async function).'
             }
         ]
     },
@@ -3023,9 +3313,7 @@ getAll();`,
         `,
         examples: [
             {
-                code: `// --- Real World Axios Usage ---
-// In a real app, you would install it: npm install axios
-// import axios from 'axios';
+                code: `import axios from 'axios';
 
 async function getUserData() {
     try {
@@ -3054,11 +3342,11 @@ async function getUserData() {
 }
 
 getUserData();`,
-                caption: 'Standard Axios usage with async/await. Notice how much cleaner the JSON handling and error catching are compared to fetch.'
+                caption: 'Standard Axios usage with <code>async/await</code>. Notice how much cleaner the JSON handling and error catching are compared to fetch.'
             },
             {
-                code: `// --- Creating an Axios Instance & Interceptors ---
-// This is how you would set up a client for a specific API in a React/Vue app
+                code: `// This is how you would set up a client for a specific API in a React app
+import axios from 'axios';
 
 const apiClient = axios.create({
     baseURL: 'https://api.myshop.com/v1',
@@ -3075,24 +3363,52 @@ apiClient.interceptors.request.use(config => {
     return Promise.reject(error);
 });
 
-// Response Interceptor: Handle global errors (like 401 Unauthorized)
+// Response Interceptor: Handle global errors
 apiClient.interceptors.response.use(response => {
     return response;
 }, error => {
+    // Handle 401 Unauthorized errors
     if (error.response && error.response.status === 401) {
-        console.log("Session expired. Redirecting to login...");
+        console.error("Session expired. Redirecting to login...");
     }
+    // Handle other errors
+    console.error("Global error:", error.response.status, error.response.data);
+
     return Promise.reject(error);
 });
 
-// Now you use 'apiClient' instead of 'axios' throughout your app
-apiClient.get('/products').then(res => console.log("Products:", res.data));`,
+async function demoApiClient() {
+    try {
+        const productsRes = await apiClient.get('/products');
+        console.log("Products:", productsRes.data);
+
+        const createdRes = await apiClient.post('/products',
+                                 { name: 'Widget', price: 19.99 });
+        console.log("Created Product:", createdRes.data);
+
+        const updatedRes = await apiClient.put('/products/1',
+                                 { name: 'Super Widget', price: 24.99 });
+        console.log("Updated Product (PUT):", updatedRes.data);
+
+        const deletedRes = await apiClient.delete('/products/1');
+        console.log("Deleted Product:", deletedRes.status);
+    } catch (error) {
+        if (error.response) {
+            console.error("API Error:", error.response.status, error.response.data);
+        } else {
+            console.error("Network Error:", error.message);
+        }
+    }
+}
+
+demoApiClient();`,
                 caption: 'Instances and interceptors allow you to centralize your API logic (auth, base URLs, error logging) in one place.'
             }
         ],
         exercises: [
             {
-                question: 'Using the mock API below (same response shape as Axios), write async code to: (1) GET <code>/users/1</code> and log the user\'s name from <code>res.data</code>, and (2) GET <code>/users/999</code> and in the <code>catch</code> block log <code>error.response.status</code>. Use <code>async/await</code> and <code>try/catch</code> — the same style you\'d use with real Axios.',
+                question: `Using the mock API below (using <code>mockApi.get(path)</code>), write async code to:<ol><li>GET <code>/users/1</code> and log the user\'s name from <code>res.data</code></li><li>GET <code>/users/999</code> and in the <code>catch</code> block log <code>error.response.status</code>. Use <code>async/await</code> and <code>try/catch</code></li></ol>
+                the same style you\'d use with real Axios.`,
                 starter: `// Mock API with Axios-style responses (runs in this app; real apps use axios)
 const mockApi = {
     get(path) {
@@ -3106,18 +3422,10 @@ const mockApi = {
 async function run() {
     // 1. GET /users/1 and log res.data.name
     // 2. GET /users/999 in a try/catch and log error.response.status
-}`,
-                solution: `// Mock API with Axios-style responses (runs in this app; real apps use axios)
-const mockApi = {
-    get(path) {
-        const id = path.split('/').pop();
-        if (id === '1') return Promise.resolve({ data: { id: 1, name: 'Alice', email: 'alice@example.com' }, status: 200 });
-        if (id === '2') return Promise.resolve({ data: { id: 2, name: 'Bob', email: 'bob@example.com' }, status: 200 });
-        return Promise.reject({ response: { status: 404, data: 'Not found' } });
-    }
-};
-
-async function run() {
+}
+    
+run();`,
+                solution: `async function run() {
     try {
         const res = await mockApi.get('/users/1');
         console.log('User name:', res.data.name);
@@ -3129,12 +3437,11 @@ async function run() {
     } catch (err) {
         if (err.response) console.log('Error status:', err.response.status);
     }
-}
-run();`,
-                explanation: 'You use the same pattern as with real Axios: await the request, read the body from res.data, and catch errors where error.response holds status and data. The mock just simulates success and 404 so this runs without a real server.'
+}`,
+                explanation: 'You use the same pattern as with real Axios: <code>await</code> the request, read the body from <code>res.data</code>, and catch errors where <code>error.response</code> holds status and data. The mock just simulates success and 404 so this runs without a real server.'
             },
             {
-                question: 'Using the same mock API, POST a new user with <code>mockApi.post(\'/users\', { name: \'Charlie\', email: \'charlie@example.com\' })</code>. Log the created user from <code>res.data</code> (the mock returns <code>{ data: { id, ...body }, status: 201 }</code>). Use async/await and try/catch.',
+                question: 'Using the same mock API, POST a new user with <code>mockApi.post(path, body)</code>. Log the created user from <code>res.data</code> (the mock returns <code>{ data: { id, ...body }, status: 201 }</code>). Use <code>async/await</code> and <code>try/catch</code>. Include whatever data you see fit in the body.',
                 starter: `const mockApi = {
     get(path) {
         const id = path.split('/').pop();
@@ -3147,20 +3454,11 @@ run();`,
 };
 
 async function run() {
-    // POST a user and log res.data (id and name)
-}`,
-                solution: `const mockApi = {
-    get(path) {
-        const id = path.split('/').pop();
-        if (id === '1') return Promise.resolve({ data: { id: 1, name: 'Alice' }, status: 200 });
-        return Promise.reject({ response: { status: 404, data: 'Not found' } });
-    },
-    post(path, data) {
-        return Promise.resolve({ data: { id: 3, ...data }, status: 201 });
-    }
-};
-
-async function run() {
+    // POST a user and log res.data (id and name) to the "/users" path
+}
+    
+run();`,
+                solution: `async function run() {
     try {
         const res = await mockApi.post('/users', { name: 'Charlie', email: 'charlie@example.com' });
         console.log('Created:', res.data);
@@ -3169,7 +3467,7 @@ async function run() {
     }
 }
 run();`,
-                explanation: 'Same as real Axios: you pass the body as the second argument and read the server response from res.data. The mock returns a created resource with an id; in production the server would do that.'
+                explanation: 'Same as real Axios: you pass the body as the second argument and read the server response from <code>res.data</code>. The mock returns a created resource with an id; in production the server would do that.'
             },
             {
                 question: 'Fetch two users in parallel with the mock API. Use <code>Promise.all([ mockApi.get(\'/users/1\'), mockApi.get(\'/users/2\') ])</code> and then log both names from the results. This is the same pattern you use with Axios when loading multiple resources at once.',
@@ -3184,25 +3482,17 @@ run();`,
 
 async function run() {
     // Use Promise.all to fetch /users/1 and /users/2, then log both names
-}`,
-                solution: `const mockApi = {
-    get(path) {
-        const id = path.split('/').pop();
-        if (id === '1') return Promise.resolve({ data: { id: 1, name: 'Alice' }, status: 200 });
-        if (id === '2') return Promise.resolve({ data: { id: 2, name: 'Bob' }, status: 200 });
-        return Promise.reject({ response: { status: 404, data: 'Not found' } });
-    }
-};
-
-async function run() {
+}
+    
+run();`,
+                solution: `async function run() {
     const [res1, res2] = await Promise.all([
         mockApi.get('/users/1'),
         mockApi.get('/users/2')
     ]);
     console.log(res1.data.name, res2.data.name);
-}
-run();`,
-                explanation: 'With Axios you often use Promise.all to run several requests in parallel and await them together. Each result still has .data with the response body — same shape as a single request.'
+}`,
+                explanation: 'With Axios you often use <code>Promise.all</code> to run several requests in parallel and await them together. Each result still has <code>.data</code> with the response body — same shape as a single request.'
             }
         ],
         quizzes: [
@@ -3216,6 +3506,50 @@ run();`,
                 ],
                 answer: 1,
                 explanation: 'Axios automatically rejects the promise for HTTP error status codes (4xx, 5xx). Fetch only rejects on network failures — a 404 response still resolves successfully with response.ok = false.'
+            },
+            {
+                question: 'Where do you find the response body in an Axios success response?',
+                options: [
+                    'response.body',
+                    'response.json',
+                    'response.data',
+                    'response.content'
+                ],
+                answer: 2,
+                explanation: 'Axios puts the parsed response body in response.data. With fetch you would use response.json to get the body.'
+            },
+            {
+                question: 'What is <code>axios.create(config)</code> typically used for?',
+                options: [
+                    'Creating a new HTTP method',
+                    'A pre-configured client with baseURL, default headers, and its own interceptors',
+                    'Initializing the library',
+                    'Creating a request queue'
+                ],
+                answer: 1,
+                explanation: 'axios.create(config) returns a new Axios instance with a fixed baseURL, timeout, default headers, and its own interceptors — so you can have one client per API and reuse it across your app.'
+            },
+            {
+                question: 'When a request fails with a 404, how do you access the status code in the catch block?',
+                options: [
+                    'error.status',
+                    'error.response.status',
+                    'error.code',
+                    'error.statusCode'
+                ],
+                answer: 1,
+                explanation: 'When the server responds with an error status, Axios gives you error.response, which has status, data, and headers. For network errors (no response), error.response is undefined.'
+            },
+            {
+                question: 'What are Axios interceptors best used for?',
+                options: [
+                    'Parsing JSON manually',
+                    'Adding auth headers or handling errors globally for every request/response',
+                    'Replacing the fetch implementation',
+                    'Cancelling requests'
+                ],
+                answer: 1,
+                explanation: 'Interceptors run for every request or every response. They are ideal for adding an auth token to all outgoing requests, logging, or handling 401/403 globally so you don\'t repeat that logic in every API call.'
             }
         ]
     }

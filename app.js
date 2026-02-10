@@ -42,7 +42,7 @@ function buildNavigation() {
     const sections = [
         { label: 'Fundamentals', ids: ['introduction', 'datatypes', 'variables', 'control_flow', 'operators_expressions', 'arrays', 'objects', 'strings', 'numbers_math', 'functions', 'template_literals', 'strict_mode'] },
         { label: 'Language Features', ids: ['this_keyword', 'classes', 'hoisting', 'error_handling', 'spread_rest', 'arrow_functions', 'destructuring', 'modules', 'data_structures', 'dates'] },
-        { label: 'Advanced & Web APIs', ids: ['dom_manipulation', 'events', 'event_bubbling', 'event_loop', 'httprequest', 'json', 'promises', 'async_await', 'fetch', 'axios'] }
+        { label: 'Advanced & Web APIs', ids: ['dom_manipulation', 'events', 'event_bubbling', 'event_loop', 'httprequest', 'json', 'promises', 'fetch', 'async_await', 'axios'] }
     ];
 
     let html = '';

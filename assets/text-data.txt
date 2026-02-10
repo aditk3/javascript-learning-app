@@ -1,0 +1,3 @@
+Hello from assets!
+This is a multi-line text file for JavaScript exercises.
+Use fetch() or readFile in Node to load this file.

@@ -1,0 +1,1 @@
+{"name":"javascript-learning-app","version":"1.0.0","description":"A comprehensive web-based JavaScript learning application with explanations, code examples, and interactive exercises.","main":"app.js","scripts":{"dev":"live-server .","test":"echo \"Error: no test specified\" && exit 1"},"keywords":[],"author":"","license":"ISC","devDependencies":{"live-server":"^1.2.2"}}
